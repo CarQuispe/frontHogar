@@ -1,8 +1,9 @@
-// src/components/common/Navbar.js
+// src/components/common/Navbar.tsx
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { Menu, X, User, LogOut, Home, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import type { User as UserType } from '../../types/user.types';
 
 const Navbar = () => {
   const { user, logout, isAuthenticated } = useAuth();
@@ -20,6 +21,16 @@ const Navbar = () => {
   if (location.pathname === '/login') {
     return null;
   }
+
+  // Función para obtener el nombre completo del usuario
+  const getUserFullName = (user: UserType | null) => {
+    if (!user) return 'Usuario';
+    return `${user.nombre} ${user.apellido || ''}`.trim();
+  };
+
+  // Obtener nombre del usuario
+  const userName = getUserFullName(user);
+  const userRole = user?.role || 'Usuario';
 
   return (
     <nav className="bg-white shadow-md border-b">
@@ -96,8 +107,9 @@ const Navbar = () => {
                     <User className="h-4 w-4 text-blue-600" />
                   </div>
                   <div className="text-left hidden md:block">
-                    <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.role}</p>
+                    {/* CORREGIDO: Usar userName en lugar de user.name */}
+                    <p className="text-sm font-medium text-gray-900">{userName}</p>
+                    <p className="text-xs text-gray-500">{userRole}</p>
                   </div>
                 </button>
 
@@ -201,8 +213,9 @@ const Navbar = () => {
                     <User className="h-5 w-5 text-blue-600" />
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.role}</p>
+                    {/* CORREGIDO: Usar userName en lugar de user.name */}
+                    <p className="text-sm font-medium text-gray-900">{userName}</p>
+                    <p className="text-xs text-gray-500">{userRole}</p>
                   </div>
                 </div>
               </div>

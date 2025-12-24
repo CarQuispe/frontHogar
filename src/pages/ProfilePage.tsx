@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useAuth, type UserRole } from '../context/AuthContext';
+import { useAuth} from '../context/AuthContext';
+import type { UserRole } from '../types/user.types';
 import { User, Mail, Shield, Calendar, Edit, Save, X } from 'lucide-react';
 
 const ProfilePage: React.FC = () => {
@@ -7,7 +8,7 @@ const ProfilePage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
 
   const [formData, setFormData] = useState({
-    name: user?.name || '',
+    name: user?.nombre || '',
     email: user?.email || '',
   });
 
@@ -36,10 +37,10 @@ const ProfilePage: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between">
             <div className="flex items-center gap-6">
               <div className="w-24 h-24 bg-white text-blue-600 rounded-full flex items-center justify-center text-3xl font-bold">
-                {user?.name?.charAt(0) || 'U'}
+                {user?.nombre?.charAt(0) || 'U'}
               </div>
               <div>
-                <h1 className="text-2xl font-bold">{user?.name || 'Usuario'}</h1>
+                <h1 className="text-2xl font-bold">{user?.nombre || 'Usuario'}</h1>
                 <p className="text-blue-100 mt-1">{allRolesDisplay}</p>
                 <p className="text-blue-200 mt-2">Hogar Santa Emilia</p>
               </div>
@@ -85,7 +86,7 @@ const ProfilePage: React.FC = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                 />
               ) : (
-                <p className="text-lg font-semibold text-gray-900">{user?.name}</p>
+                <p className="text-lg font-semibold text-gray-900">{user?.nombre}</p>
               )}
             </div>
 

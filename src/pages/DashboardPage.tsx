@@ -55,7 +55,7 @@ const DashboardPage: React.FC = () => {
       {/* TÍTULO */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">
-          Bienvenido/a, {user?.name || 'Usuario'}
+          Bienvenido/a, {user?.nombre || 'Usuario'}
         </h1>
         <p className="text-gray-600 mt-1">
           Sistema de Gestión — Hogar de Niños

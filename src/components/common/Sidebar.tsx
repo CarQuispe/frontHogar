@@ -1,6 +1,7 @@
 // src/components/common/Sidebar.tsx
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
+import type { User as UserType } from '../../types/user.types';
 
 // Iconos necesarios
 import { 
@@ -31,6 +32,18 @@ const Sidebar: React.FC = () => {
     { name: 'Inventario', href: '/inventario', icon: FaCubes },
     { name: 'Configuración', href: '/configuracion', icon: FaCog },
   ];
+
+  // Función para obtener el nombre completo del usuario
+  const getUserFullName = (user: UserType | null) => {
+    if (!user) return 'Usuario';
+    return `${user.nombre} ${user.apellido || ''}`.trim();
+  };
+
+  // Obtener iniciales para el avatar
+  const getUserInitials = (user: UserType | null) => {
+    if (!user || !user.nombre) return 'U';
+    return user.nombre.charAt(0).toUpperCase();
+  };
 
   const handleNavigation = (path: string) => {
     localStorage.setItem('currentPage', path);
@@ -65,12 +78,13 @@ const Sidebar: React.FC = () => {
         <div className="mt-6 p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-100 text-blue-800 rounded-full flex items-center justify-center font-bold">
-              {user?.name?.charAt(0) || 'U'}
+              {getUserInitials(user)}
             </div>
 
             <div className="flex-1 min-w-0">
+              {/* CORREGIDO: Usar getUserFullName en lugar de user.name */}
               <p className="text-sm font-medium text-gray-900 truncate">
-                {user?.name || 'Usuario'}
+                {getUserFullName(user)}
               </p>
               <p className="text-xs text-gray-500 truncate">
                 {user?.email || 'correo@demo.com'}
@@ -136,5 +150,3 @@ const Sidebar: React.FC = () => {
 };
 
 export default Sidebar;
-
-

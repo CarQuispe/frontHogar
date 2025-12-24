@@ -1,3 +1,4 @@
+// apps/frontend/src/components/auth/LoginForm.tsx
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,12 +34,11 @@ const LoginForm: React.FC = () => {
     setError('');
     
     try {
-      // ✅ CORRECCIÓN: Pasar un objeto con email y password
-      await login(
-        data.email,
-        'ADMIN',           // O el rol que corresponda
-        'Usuario Sistema'  // Nombre que deseas mostrar
-      );
+      // ✅ CORRECCIÓN: Pasar un objeto con email y password solamente
+      await login({
+        email: data.email,
+        password: data.password
+      });
       navigate('/dashboard');
     } catch (err: any) {
       // Manejar diferentes formatos de error
