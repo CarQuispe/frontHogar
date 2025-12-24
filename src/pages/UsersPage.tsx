@@ -1,163 +1,272 @@
-// src/pages/UsersPage.tsx
-import React, { useState } from 'react';
-import { useAuth, type UserRole } from '../context/AuthContext';
+// apps/frontend/src/pages/UsersPage.tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../hooks/useAuth';
 import { useUsers } from '../hooks/useUsers';
+import { usePermissions } from '../hooks/useAuth';
+
 import UserList from '../components/users/UserList';
 import UserForm from '../components/users/UserForm';
-import { Plus, Search, Filter } from 'lucide-react'; // ✅ Filter incluido
+import UserFilters from '../components/users/UserFilters';
+import UsersStats from '../components/users/UsersStats';
+
+import {
+  Plus,
+  Search,
+  RefreshCw,
+  Download,
+  Users as UsersIcon,
+  AlertCircle,
+} from 'lucide-react';
+
+import type { User, UserFilters as FiltersType, CreateUserDto, UpdateUserDto } from '../types/user.types';
 
 const UsersPage: React.FC = () => {
-  const { user, hasRole } = useAuth();
-  const { users, loading, createUser, updateUser, deleteUser } = useUsers();
+  const { user: currentUser } = useAuth();
+  const permissions = usePermissions();
+
+  const {
+    users,
+    loading,
+    error,
+    total,
+    fetchUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+    activateUser,       // ← Usar este método
+    deactivateUser,     // ← Usar este método
+    clearError,
+  } = useUsers();
+
+  /* =========================
+      ESTADOS
+  ========================== */
+  const [filters, setFilters] = useState<FiltersType>({});
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [showForm, setShowForm] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
-  const [showFilters, setShowFilters] = useState(false); // ✅ Estado para mostrar/ocultar filtros
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  const [filters, setFilters] = useState({
-    search: '',
-    role: 'all',
-    status: 'all',
-  });
+  /* =========================
+      CARGA DE USUARIOS
+  ========================== */
+  useEffect(() => {
+    fetchUsers(filters);
+  }, [filters]);
 
-  if (!user) return <div>No autorizado</div>;
+  /* =========================
+      SEARCH (DEBOUNCE)
+  ========================== */
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((prev) => {
+        if (searchTerm.trim()) {
+          return { ...prev, search: searchTerm };
+        } else {
+          const { search: _, ...rest } = prev;
+          return rest;
+        }
+      });
+    }, 400);
 
-  const handleCreateUser = async (userData: any) => {
-    await createUser(userData);
-    setShowForm(false);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  /* =========================
+      HANDLERS
+  ========================== */
+  const handleCreateUser = async (data: CreateUserDto | Partial<User>) => {
+    try {
+      await createUser(data as CreateUserDto);
+      setShowForm(false);
+      fetchUsers(filters);
+    } catch (err) {
+      console.error('Error al crear usuario:', err);
+    }
   };
 
-  const handleUpdateUser = async (userData: any) => {
-    if (editingUser) {
-      await updateUser(editingUser.id, userData);
+  const handleUpdateUser = async (data: UpdateUserDto | Partial<User>) => {
+    if (!editingUser) return;
+    
+    try {
+      await updateUser(editingUser.id, data);
       setEditingUser(null);
+      setShowForm(false);
+      fetchUsers(filters);
+    } catch (err) {
+      console.error('Error al actualizar usuario:', err);
     }
   };
 
-  const filteredUsers = users.filter((u) => {
-    if (filters.search) {
-      const text = filters.search.toLowerCase();
-      if (!u.name.toLowerCase().includes(text) && !u.email.toLowerCase().includes(text)) {
-        return false;
-      }
+  const handleDeleteUser = async (id: string) => {
+    try {
+      await deleteUser(id); // Ya tiene confirmación interna
+      // No necesitas fetchUsers aquí porque deleteUser ya actualiza el estado
+    } catch (err) {
+      console.error('Error al eliminar usuario:', err);
     }
+  };
 
-    if (filters.role !== 'all' && u.role !== filters.role) return false;
-
-    if (filters.status !== 'all') {
-      const isActive = filters.status === 'active';
-      if (u.isActive !== isActive) return false;
+  const handleActivateUser = async (id: string) => {
+    try {
+      await activateUser(id); // Usa el método específico
+      // No necesitas fetchUsers aquí porque activateUser ya actualiza el estado
+    } catch (err) {
+      console.error('Error al activar usuario:', err);
     }
+  };
 
-    return true;
-  });
+  const handleDeactivateUser = async (id: string) => {
+    try {
+      await deactivateUser(id); // Usa el método específico
+      // No necesitas fetchUsers aquí porque deactivateUser ya actualiza el estado
+    } catch (err) {
+      console.error('Error al desactivar usuario:', err);
+    }
+  };
 
-  return (
-    <div className="space-y-6">
-      {/* === TÍTULO === */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Usuarios</h1>
-        <p className="text-gray-600 mt-2">Colaboradores del sistema</p>
+  const handleRefresh = useCallback(() => {
+    fetchUsers(filters);
+  }, [fetchUsers, filters]);
+
+  const handleExport = () => {
+    console.log('Exportar usuarios', users);
+    alert('Exportación en desarrollo');
+  };
+
+  /* =========================
+      PERMISOS
+  ========================== */
+  if (!permissions.canManageUsers) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+        <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+        <h1 className="text-2xl font-bold mb-2 text-gray-800">Acceso Denegado</h1>
+        <p className="text-gray-600 text-center max-w-md mb-6">
+          No tienes permisos para gestionar usuarios.
+        </p>
+        <a
+          href="/dashboard"
+          className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Volver al Dashboard
+        </a>
       </div>
+    );
+  }
 
-      {/* === FILTROS === */}
-      <div className="space-y-4">
-        {/* Barra de búsqueda y botones */}
-        <div className="flex items-center gap-4">
-          {/* Búsqueda */}
-          <div className="flex-1 flex items-center gap-2 border rounded-lg px-3 py-2">
-            <Search size={18} className="text-gray-500" />
-            <input
-              type="text"
-              placeholder="Buscar por nombre o email..."
-              className="w-full outline-none"
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            />
-          </div>
-
-          {/* Botón Filtros (mobile/opcional) */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="md:hidden border rounded-lg px-3 py-2 flex items-center gap-2"
-          >
-            <Filter size={18} />
-            Filtros
-          </button>
-
-          {/* Botón Nuevo Usuario */}
-          {hasRole('DIRECTORA' as UserRole) && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-            >
-              <Plus size={18} /> Nuevo Usuario
-            </button>
-          )}
+  /* =========================
+      RENDER
+  ========================== */
+  return (
+    <div className="space-y-6 p-4 md:p-6">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <UsersIcon className="w-7 h-7 md:w-8 md:h-8" />
+            Gestión de Usuarios
+          </h1>
+          <p className="text-gray-600 mt-1">
+            Administra los usuarios del sistema ({total} usuarios)
+          </p>
         </div>
 
-        {/* Filtros avanzados */}
-        {(showFilters || window.innerWidth >= 768) && (
-          <div className="flex flex-wrap items-center gap-4 p-4 bg-gray-50 rounded-lg">
-            {/* Roles */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-700">Rol:</label>
-              <select
-                className="border rounded-lg px-3 py-2"
-                value={filters.role}
-                onChange={(e) => setFilters({ ...filters, role: e.target.value })}
-              >
-                <option value="all">Todos los roles</option>
-                <option value="DIRECTORA">Directora</option>
-                <option value="PSICOLOGA">Psicóloga</option>
-                <option value="TRABAJADORA_SOCIAL">Trabajadora Social</option>
-                <option value="ADMIN">Administrador</option>
-                <option value="VOLUNTARIO">Voluntario</option>
-              </select>
-            </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="px-4 py-2 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
 
-            {/* Estado */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-700">Estado:</label>
-              <select
-                className="border rounded-lg px-3 py-2"
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              >
-                <option value="all">Todos</option>
-                <option value="active">Activos</option>
-                <option value="inactive">Inactivos</option>
-              </select>
-            </div>
-
-            {/* Botón limpiar filtros */}
+          {permissions.canExportData && (
             <button
-              onClick={() => setFilters({ search: '', role: 'all', status: 'all' })}
-              className="text-sm text-gray-600 hover:text-gray-900"
+              onClick={handleExport}
+              className="px-4 py-2 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors"
             >
-              Limpiar filtros
+              <Download className="w-4 h-4" />
+              Exportar
             </button>
-          </div>
-        )}
+          )}
+
+          <button
+            onClick={() => {
+              setEditingUser(null);
+              setShowForm(true);
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Usuario
+          </button>
+        </div>
       </div>
 
-      {/* === LISTA DE USUARIOS === */}
-      <UserList
-        users={filteredUsers}
-        loading={loading}
-        onView={(userId) => {
-          const userToView = users.find(u => u.id === userId);
-          console.log('Ver usuario:', userToView);
-          // Aquí podrías abrir un modal o redirigir
-        }}
-        onEdit={(user) => setEditingUser(user)}
-        onDelete={(userId) => {
-          if (window.confirm('¿Eliminar usuario?')) deleteUser(userId);
+      {/* STATS */}
+      <UsersStats users={users} />
+
+      {/* FILTROS */}
+      <UserFilters
+        filters={filters}
+        onFilterChange={setFilters}
+        onClearFilters={() => {
+          setFilters({});
+          setSearchTerm('');
         }}
       />
 
-      {/* === MODAL DE FORMULARIO === */}
-      {(showForm || editingUser) && hasRole('DIRECTORA' as UserRole) && (
+      {/* SEARCH */}
+      <div className="relative max-w-lg">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Buscar por nombre, email o teléfono..."
+          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+        />
+      </div>
+
+      {/* ERROR */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-red-700 font-medium">Error</p>
+              <p className="text-red-600 text-sm mt-1">{error}</p>
+            </div>
+            <button
+              onClick={clearError}
+              className="text-sm text-red-600 hover:text-red-800 ml-4"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* LISTA */}
+      <div className="bg-white rounded-xl border overflow-hidden">
+        <UserList
+          users={users}
+          loading={loading}
+          onEdit={(user) => {
+            setEditingUser(user);
+            setShowForm(true);
+          }}
+          onDelete={handleDeleteUser}
+          onActivate={handleActivateUser}
+          onDeactivate={handleDeactivateUser}
+          currentUserId={currentUser?.id}
+        />
+      </div>
+
+      {/* FORMULARIO */}
+      {showForm && (
         <UserForm
           user={editingUser}
           onSubmit={editingUser ? handleUpdateUser : handleCreateUser}
@@ -165,6 +274,7 @@ const UsersPage: React.FC = () => {
             setShowForm(false);
             setEditingUser(null);
           }}
+          isEditing={!!editingUser}
         />
       )}
     </div>
