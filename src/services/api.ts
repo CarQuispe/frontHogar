@@ -1,4 +1,4 @@
-// src/services/api.ts
+// apps/frontend/src/services/api.ts
 import axios from 'axios';
 import type {
   AxiosInstance,
@@ -7,156 +7,206 @@ import type {
   AxiosError,
   InternalAxiosRequestConfig,
 } from 'axios';
+import { API_CONFIG } from '../utils/constants';
 
-// URL base de tu API NestJS
-const API_URL = import.meta.env.VITE_API_URL || 'https://backendhogar.onrender.com';
-
-// Crear instancia de axios con configuración base
+// ===============================
+// Instancia base
+// ===============================
 const api: AxiosInstance = axios.create({
-  baseURL: API_URL,
-  timeout: 30000, // 30 segundos
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
   },
-  withCredentials: false, // Cambiar a true si usas cookies
+  withCredentials: false,
 });
 
-// Interceptor para agregar token JWT automáticamente
+// ===============================
+// REQUEST INTERCEPTOR
+// ===============================
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('accessToken') || 
-                  sessionStorage.getItem('accessToken');
-    
-    if (token) {
-      config.headers = config.headers || {};
+    const token =
+      localStorage.getItem('accessToken') ||
+      sessionStorage.getItem('accessToken');
+
+    if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    // Agregar timestamp para evitar cache solo en GET
-    if (config.method?.toLowerCase() === 'get' && config.url && !config.url.includes('?')) {
-      config.url = `${config.url}?_t=${Date.now()}`;
+
+    // 🔹 Evitar cache SOLO en GET
+    if (config.method?.toLowerCase() === 'get' && config.url) {
+      const hasQuery = config.url.includes('?');
+      const separator = hasQuery ? '&' : '?';
+      config.url = `${config.url}${separator}_=${Date.now()}`;
     }
-    
+
     return config;
   },
   (error: AxiosError) => {
-    console.error('Error en interceptor de request:', error);
+    console.error('❌ Error en request interceptor:', error);
     return Promise.reject(error);
   }
 );
 
-// Interceptor para manejar errores de respuesta
+// ===============================
+// RESPONSE INTERCEPTOR
+// ===============================
 api.interceptors.response.use(
-  (response: AxiosResponse) => {
-    return response;
-  },
+  (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+    const originalRequest = error.config as InternalAxiosRequestConfig & { 
+      _retry?: boolean 
+    };
     
-    // Si el error es 401 y no hemos intentado refrescar el token
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
-      originalRequest._retry = true;
+    // 🔹 Manejo de error 401 (No autorizado)
+    if (error.response?.status === 401 && !originalRequest?._retry) {
+      console.warn('🔒 Token inválido o expirado');
+      clearAuthData();
       
-      try {
-        // Intentar refrescar el token
-        const refreshToken = localStorage.getItem('refreshToken') || 
-                            sessionStorage.getItem('refreshToken');
-        
-        if (refreshToken) {
-          const response = await axios.post(`${API_URL}/auth/refresh-token`, {
-            refreshToken
-          });
-          
-          const { accessToken } = response.data;
-          
-          // Guardar nuevo token
-          localStorage.setItem('accessToken', accessToken);
-          
-          // Reintentar la petición original
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          }
-          
-          return api(originalRequest);
-        }
-      } catch (refreshError) {
-        console.error('Error al refrescar token:', refreshError);
-      }
-      
-      // Si no se pudo refrescar, redirigir a login
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      sessionStorage.removeItem('accessToken');
-      sessionStorage.removeItem('refreshToken');
-      sessionStorage.removeItem('user');
-      
-      // Redirigir a login solo si no estamos ya en esa página
       if (!window.location.pathname.includes('/login')) {
+        const currentPath = window.location.pathname + window.location.search;
+        sessionStorage.setItem('redirectAfterLogin', currentPath);
         window.location.href = '/login';
       }
     }
-    
-    // Manejo de otros errores comunes
+
+    // 🔹 Manejar otros errores
     if (error.response) {
-      switch (error.response.status) {
-        case 403:
-          console.error('Acceso denegado: No tienes permisos para esta acción');
-          break;
-        case 404:
-          console.error('Recurso no encontrado');
-          break;
-        case 500:
-          console.error('Error interno del servidor');
-          break;
-        case 429:
-          console.error('Demasiadas peticiones. Por favor, espere un momento.');
-          break;
-      }
+      const status = error.response.status;
+      const data = error.response.data as any;
       
-      // Extraer mensaje de error del servidor
-      if (error.response.data) {
-        const serverError = error.response.data as any;
-        error.message = serverError.message || 
-                        serverError.error || 
-                        error.message;
-      }
-    } else if (error.request) {
-      // Error de red o servidor no responde
-      console.error('Error de red: No se pudo conectar con el servidor');
-      error.message = 'No se pudo conectar con el servidor. Verifique su conexión a internet.';
+      console.error(`❌ Error ${status} en ${error.config?.method?.toUpperCase()} ${error.config?.url}:`, 
+        data?.message || 'Sin mensaje');
+      
+    } else if (error.code === 'ECONNABORTED') {
+      console.error('⏱️ Timeout: La petición tardó demasiado');
+      
+          
+    } else {
+      console.error('⚙️ Error en configuración:', error.message);
     }
-    
+
     return Promise.reject(error);
   }
 );
 
-// Tipos para los métodos de API
-export interface ApiClient {
-  get: <T = any>(url: string, config?: AxiosRequestConfig) => Promise<T>;
-  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => Promise<T>;
-  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => Promise<T>;
-  patch: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => Promise<T>;
-  delete: <T = any>(url: string, config?: AxiosRequestConfig) => Promise<T>;
+// ===============================
+// Helpers
+// ===============================
+function clearAuthData(): void {
+  const authKeys = ['accessToken', 'refreshToken', 'user', 'userRole'];
+  authKeys.forEach(key => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+  console.log('🔓 Datos de autenticación limpiados');
 }
 
-// Métodos helper para tipos de datos comunes
-export const apiClient: ApiClient = {
-  get: <T = any>(url: string, config?: AxiosRequestConfig) => 
-    api.get<T>(url, config).then(response => response.data),
+// ===============================
+// FUNCIÓN DE PRUEBA DE CONEXIÓN
+// ===============================
+export const testBackendConnection = async (): Promise<{
+  success: boolean;
+  message: string;
+  data?: any;
+  status?: number;
+  url?: string;
+}> => {
+  const testUrl = '/auth/health'; // Endpoint de health check
+  const fullUrl = api.defaults.baseURL + testUrl;
   
-  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => 
-    api.post<T>(url, data, config).then(response => response.data),
+  console.log('🔍 Probando conexión con backend...');
+  console.log('BaseURL configurada:', api.defaults.baseURL);
+  console.log('URL completa a probar:', fullUrl);
   
-  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => 
-    api.put<T>(url, data, config).then(response => response.data),
-  
-  patch: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => 
-    api.patch<T>(url, data, config).then(response => response.data),
-  
-  delete: <T = any>(url: string, config?: AxiosRequestConfig) => 
-    api.delete<T>(url, config).then(response => response.data),
+  try {
+    const startTime = Date.now();
+    const response = await api.get(testUrl, { 
+      timeout: 10000 // 10 segundos para la prueba
+    });
+    const endTime = Date.now();
+    
+    console.log(`✅ Backend conectado correctamente`);
+    console.log(`⏱️  Tiempo de respuesta: ${endTime - startTime}ms`);
+    console.log(`📊 Status: ${response.status}`);
+    console.log(`📦 Datos:`, response.data);
+    
+    return {
+      success: true,
+      message: 'Backend conectado correctamente',
+      data: response.data,
+      status: response.status,
+      url: fullUrl
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Error conectando al backend:');
+    console.error('URL intentada:', fullUrl);
+    
+    let errorMessage = 'Error desconocido';
+    let status = 0;
+    
+    if (error.response) {
+      status = error.response.status;
+      errorMessage = `El backend respondió con error ${status}`;
+      console.error('Status:', status);
+      console.error('Data:', error.response.data);
+      
+    } else if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Timeout: El backend no respondió en 10 segundos';
+      console.error('⚠️  Timeout - ¿Está corriendo el backend?');
+      console.error('Verifica que el servidor esté levantado en:', api.defaults.baseURL?.replace('/api', ''));
+      
+    } else if (error.request) {
+      errorMessage = 'No hay respuesta del servidor';
+      console.error('⚠️  Sin respuesta - Verifica:');
+      console.error('1. ¿El backend está corriendo?');
+      console.error('2. ¿El puerto 3000 está libre?');
+      console.error('3. ¿Hay un firewall bloqueando?');
+      
+    } else {
+      errorMessage = error.message;
+      console.error('Error:', error.message);
+    }
+    
+    // Sugerencias de solución
+    console.log('\n🔧 Posibles soluciones:');
+    console.log('1. Ejecuta el backend: npm run start:dev');
+    console.log('2. Verifica que el backend esté en http://localhost:3000');
+    console.log('3. Prueba manualmente: curl http://localhost:3000/api/auth/health');
+    console.log('4. Revisa que no haya errores en la consola del backend');
+    
+    return {
+      success: false,
+      message: errorMessage,
+      status: status,
+      url: fullUrl
+    };
+  }
 };
 
+// ===============================
+// API CLIENT TIPADO
+// ===============================
+export interface ApiClient {
+  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>;
+  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
+  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
+  patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T>;
+  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>;
+}
+
+export const apiClient: ApiClient = {
+  get: (url, config) => api.get(url, config).then(r => r.data),
+  post: (url, data, config) => api.post(url, data, config).then(r => r.data),
+  put: (url, data, config) => api.put(url, data, config).then(r => r.data),
+  patch: (url, data, config) => api.patch(url, data, config).then(r => r.data),
+  delete: (url, config) => api.delete(url, config).then(r => r.data),
+};
+
+// ===============================
+// Exportaciones
+// ===============================
 export default api;

@@ -16,6 +16,8 @@ export const useAuth = () => {
 };
 
 /**
+ * 
+ * 
  * Hook para verificar si el usuario tiene un rol específico
  */
 export const useRole = (role: string) => {

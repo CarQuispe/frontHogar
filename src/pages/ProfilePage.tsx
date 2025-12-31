@@ -1,33 +1,46 @@
 import React, { useState } from 'react';
-import { useAuth} from '../context/AuthContext';
-import type { UserRole } from '../types/user.types';
-import { User, Mail, Shield, Calendar, Edit, Save, X } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import type { UserRole } from '../types/auth.types';
+
+import {
+  User as UserIcon,
+  Mail,
+  Shield,
+  Calendar,
+  Edit,
+  Save,
+  X,
+} from 'lucide-react';
 
 const ProfilePage: React.FC = () => {
-  const { user } = useAuth(); // obtener el usuario completo
+  const { user } = useAuth(); // usuario desde AuthContext
   const [isEditing, setIsEditing] = useState(false);
 
   const [formData, setFormData] = useState({
-    name: user?.nombre || '',
-    email: user?.email || '',
+    name: user?.name ?? '',
+    email: user?.email ?? '',
   });
 
   const handleSave = () => {
-    alert('Cambios guardados (demo, sin API)');
+    alert('Cambios guardados (demo – sin API)');
     setIsEditing(false);
   };
 
-  const roleDisplayMap: Record<UserRole, string> = {
-    DIRECTORA: 'Directora',
-    PSICOLOGA: 'Psicóloga',
-    TRABAJADORA_SOCIAL: 'Trabajadora Social',
-    ADMIN: 'Administradora',
-    VOLUNTARIO: 'Voluntario/a',
-  };
+  // Mapeo de roles para mostrar
+const roleDisplayMap: Record<UserRole, string> = {
+  DIRECTORA: 'Directora',
+  PSICOLOGA: 'Psicóloga',
+  TRABAJADORA_SOCIAL: 'Trabajadora Social',
+  ADMIN: 'Administradora',
+  VOLUNTARIO: 'Voluntario/a',
+};
 
-  const allRolesDisplay = user?.role
-    ? roleDisplayMap[user.role]
-    : 'Sin rol asignado';
+ function getRoleDisplay(role?: string): string {
+  if (!role) return 'Sin rol asignado';
+  return roleDisplayMap[role as UserRole] ?? 'Rol desconocido';
+}
+
+const roleDisplay = getRoleDisplay(user?.role);
 
   return (
     <div className="max-w-4xl mx-auto py-8">
@@ -37,11 +50,13 @@ const ProfilePage: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between">
             <div className="flex items-center gap-6">
               <div className="w-24 h-24 bg-white text-blue-600 rounded-full flex items-center justify-center text-3xl font-bold">
-                {user?.nombre?.charAt(0) || 'U'}
+                {user?.name?.charAt(0) ?? 'U'}
               </div>
               <div>
-                <h1 className="text-2xl font-bold">{user?.nombre || 'Usuario'}</h1>
-                <p className="text-blue-100 mt-1">{allRolesDisplay}</p>
+                <h1 className="text-2xl font-bold">
+                  {user?.name ?? 'Usuario'}
+                </h1>
+                <p className="text-blue-100 mt-1">{roleDisplay}</p>
                 <p className="text-blue-200 mt-2">Hogar Santa Emilia</p>
               </div>
             </div>
@@ -75,18 +90,24 @@ const ProfilePage: React.FC = () => {
             {/* Nombre */}
             <div className="bg-gray-50 rounded-lg p-6">
               <div className="flex items-center gap-3 mb-3">
-                <User className="w-5 h-5 text-gray-500" />
-                <span className="font-medium text-gray-700">Nombre completo</span>
+                <UserIcon className="w-5 h-5 text-gray-500" />
+                <span className="font-medium text-gray-700">
+                  Nombre completo
+                </span>
               </div>
               {isEditing ? (
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                 />
               ) : (
-                <p className="text-lg font-semibold text-gray-900">{user?.nombre}</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {user?.name}
+                </p>
               )}
             </div>
 
@@ -94,38 +115,46 @@ const ProfilePage: React.FC = () => {
             <div className="bg-gray-50 rounded-lg p-6">
               <div className="flex items-center gap-3 mb-3">
                 <Mail className="w-5 h-5 text-gray-500" />
-                <span className="font-medium text-gray-700">Correo electrónico</span>
+                <span className="font-medium text-gray-700">
+                  Correo electrónico
+                </span>
               </div>
               {isEditing ? (
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                 />
               ) : (
-                <p className="text-lg font-semibold text-gray-900">{user?.email}</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {user?.email}
+                </p>
               )}
             </div>
 
-            {/* Roles */}
+            {/* Rol */}
             <div className="bg-gray-50 rounded-lg p-6">
               <div className="flex items-center gap-3 mb-3">
                 <Shield className="w-5 h-5 text-gray-500" />
-                <span className="font-medium text-gray-700">Roles en el sistema</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 font-medium rounded-full text-sm">
-                  {allRolesDisplay}
+                <span className="font-medium text-gray-700">
+                  Rol en el sistema
                 </span>
               </div>
+              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 font-medium rounded-full text-sm">
+                {roleDisplay}
+              </span>
             </div>
 
             {/* Miembro desde */}
             <div className="bg-gray-50 rounded-lg p-6">
               <div className="flex items-center gap-3 mb-3">
                 <Calendar className="w-5 h-5 text-gray-500" />
-                <span className="font-medium text-gray-700">Miembro desde</span>
+                <span className="font-medium text-gray-700">
+                  Miembro desde
+                </span>
               </div>
               <p className="text-lg font-semibold text-gray-900">
                 {new Date().toLocaleDateString('es-BO', {

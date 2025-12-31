@@ -1,244 +1,115 @@
 // src/context/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react'; 
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
-import type { 
-  User, 
-  UserRole, 
-  LoginCredentials, 
-  RegisterData 
-} from '../types/auth.types';
+import type { User, LoginCredentials, RegisterData, AuthResponse } from '../services/auth.service'; // ✅ Importación de tipos
 
-// -----------------------------
-// Tipos
-// -----------------------------
 interface AuthContextType {
-  isAuthenticated: boolean;
   user: User | null;
   isLoading: boolean;
   error: string | null;
+  isAuthenticated: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
-  loginDemo: (role: UserRole) => Promise<void>;
-  register: (data: RegisterData) => Promise<void>;
+  register: (userData: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
-  hasRole: (role: UserRole) => boolean;
-  hasAnyRole: (roles: UserRole[]) => boolean;
   clearError: () => void;
-  refreshToken: () => Promise<void>;
 }
 
-// -----------------------------
-// Contexto
-// -----------------------------
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// -----------------------------
-// Provider
-// -----------------------------
 interface AuthProviderProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Cargar usuario desde localStorage al iniciar
   useEffect(() => {
-    const loadUser = async () => {
-      setIsLoading(true);
+    const initializeAuth = async () => {
       try {
-        const storedUser = authService.getCurrentUser();
-        const hasToken = authService.isAuthenticated();
-
-        if (storedUser && hasToken) {
+        const storedUser = authService.getStoredUser();
+        
+        if (storedUser && authService.isAuthenticated()) {
           setUser(storedUser);
-          
-          // Verificar si el token necesita refrescarse
-          if (authService.isTokenExpiringSoon(10)) { // 10 minutos antes de expirar
-            try {
-              await authService.refreshToken();
-              const refreshedUser = authService.getCurrentUser();
-              if (refreshedUser) {
-                setUser(refreshedUser);
-              }
-            } catch (refreshError) {
-              console.warn('No se pudo refrescar el token:', refreshError);
-              await handleLogout();
-            }
-          }
+        } else {
+          authService.clearAuthData();
+          setUser(null);
         }
-      } catch (err) {
-        console.error('Error cargando usuario:', err);
+      } catch (error) {
+        console.error('Error al inicializar autenticación:', error);
+        authService.clearAuthData();
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadUser();
+    initializeAuth();
   }, []);
 
-  // Interceptor para manejar tokens expirados durante peticiones
-  useEffect(() => {
-    const handleTokenExpired = () => {
-      if (user && !authService.isAuthenticated()) {
-        handleLogout();
-      }
-    };
-
-    // Escuchar eventos de storage para sincronización entre pestañas
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'accessToken' && !e.newValue) {
-        handleLogout();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    const interval = setInterval(handleTokenExpired, 60000); // Verificar cada minuto
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
-  }, [user]);
-
-  // Login con credenciales reales
-  const login = async (credentials: LoginCredentials) => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     setIsLoading(true);
     setError(null);
     
     try {
       const response = await authService.login(credentials);
       setUser(response.user);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 
-                          err.message || 
-                          'Error al iniciar sesión';
-      setError(errorMessage);
-      throw err;
+      setError(err.message || 'Error al iniciar sesión');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [navigate]);
 
-  // Login demo para desarrollo
-  const loginDemo = async (role: UserRole = 'DIRECTORA') => {
+  const register = useCallback(async (userData: RegisterData) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Datos de usuario demo
-      const demoUser: User = {
-        id: 'demo-id',
-        nombre: 'Usuario Demo',
-        email: `demo-${role.toLowerCase()}@residencia.com`,
-        role,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      // Token demo (NO usar en producción)
-      const demoToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vLWlkIiwiZW1haWwiOiJkZW1vQHJlc2lkZW5jaWEuY29tIiwicm9sZSI6IkRJUkVDVE9SQSIsIm5vbWJyZSI6IlVzdWFyaW8gRGVtbyIsImlhdCI6MTcxMzg5NjQwMCwiZXhwIjoxNzQ1NDMyNDAwfQ.fake-token-for-demo-only';
-      
-      // Guardar datos demo
-      localStorage.setItem('accessToken', demoToken);
-      localStorage.setItem('user', JSON.stringify(demoUser));
-      
-      setUser(demoUser);
-      navigate('/dashboard');
-    } catch (err) {
-      setError('Error en login demo');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Registro
-  const register = async (data: RegisterData) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await authService.register(data);
+      const response = await authService.register(userData);
       setUser(response.user);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 
-                          err.message || 
-                          'Error al registrar usuario';
-      setError(errorMessage);
-      throw err;
+      setError(err.message || 'Error al registrarse');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [navigate]);
 
-  // Logout
-  const handleLogout = async () => {
+  const logout = useCallback(async () => {
     setIsLoading(true);
     
     try {
       await authService.logout();
-      setUser(null);
-      navigate('/login');
-    } catch (err) {
-      console.error('Error al cerrar sesión:', err);
-      // Limpiar local storage aunque falle
-      authService.clearAuth();
-      setUser(null);
-      navigate('/login');
+    } catch (error) {
+      console.warn('Error al cerrar sesión en el servidor:', error);
     } finally {
+      authService.clearAuthData();
+      setUser(null);
+      setError(null);
+      navigate('/login', { replace: true });
       setIsLoading(false);
     }
-  };
+  }, [navigate]);
 
-  // Verificar rol específico
-  const hasRole = (role: UserRole): boolean => {
-    return user?.role === role;
-  };
+  const clearError = useCallback(() => setError(null), []);
 
-  // Verificar múltiples roles
-  const hasAnyRole = (roles: UserRole[]): boolean => {
-    return roles.some(role => user?.role === role);
-  };
-
-  // Limpiar errores
-  const clearError = () => {
-    setError(null);
-  };
-
-  // Refrescar token manualmente
-  const refreshToken = async () => {
-    try {
-      await authService.refreshToken();
-      const refreshedUser = authService.getCurrentUser();
-      if (refreshedUser) {
-        setUser(refreshedUser);
-      }
-    } catch (err) {
-      console.error('Error al refrescar token:', err);
-      await handleLogout();
-    }
-  };
+  const isAuthenticated = authService.isAuthenticated();
 
   const value: AuthContextType = {
-    isAuthenticated: !!user && authService.isAuthenticated(),
     user,
     isLoading,
     error,
+    isAuthenticated,
     login,
-    loginDemo,
     register,
-    logout: handleLogout,
-    hasRole,
-    hasAnyRole,
+    logout,
     clearError,
-    refreshToken,
   };
 
   return (
@@ -248,16 +119,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
-// EXPORTA EL CONTEXTO PARA QUE useAuth.ts PUEDA IMPORTARLO
-export { AuthContext };
-
-// -----------------------------
-// Hook para usar contexto
-// -----------------------------
-export const useAuth = () => {
+// Hook personalizado para usar el contexto
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth debe usarse dentro de AuthProvider');
+  
+  if (context === undefined) {
+    throw new Error('useAuth debe ser usado dentro de un AuthProvider');
   }
+  
   return context;
 };
+
+// ✅ Exportar el AuthContext
+export { AuthContext };
